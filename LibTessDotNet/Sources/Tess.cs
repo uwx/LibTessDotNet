@@ -88,20 +88,14 @@ namespace LibTessDotNet
         CounterClockwise
     }
 
-    public struct ContourVertex
+    public struct ContourVertex(Vec3 position, object data = null)
     {
-        public Vec3 Position;
-        public object Data;
-
-        public ContourVertex(Vec3 position, object data = null)
-        {
-            Position = position;
-            Data = data;
-        }
+        public Vec3 Position = position;
+        public object Data = data;
 
         public override string ToString()
         {
-            return string.Format("{0}, {1}", Position, Data);
+            return $"{Position}, {Data}";
         }
     }
 
@@ -173,25 +167,27 @@ namespace LibTessDotNet
         /// <summary>
         /// Normal of the tessellated mesh. The normal is the main axis of sweep that has been used.
         /// </summary>
-        public Vec3 Normal { get { return _normal; } }
+        public Vec3 Normal => _normal;
 
         /// <summary>
         /// Vertices of the tessellated mesh.
         /// </summary>
-        public ContourVertex[] Vertices { get { return _vertices; } }
+        public ContourVertex[] Vertices => _vertices;
+
         /// <summary>
         /// Number of vertices in the tessellated mesh.
         /// </summary>
-        public int VertexCount { get { return _vertexCount; } }
+        public int VertexCount => _vertexCount;
 
         /// <summary>
         /// Indices of the tessellated mesh. See <see cref="ElementType"/> for details on data layout.
         /// </summary>
-        public int[] Elements { get { return _elements; } }
+        public int[] Elements => _elements;
+
         /// <summary>
         /// Number of elements in the tessellated mesh.
         /// </summary>
-        public int ElementCount { get { return _elementCount; } }
+        public int ElementCount => _elementCount;
 
         public Tess()
             : this(new DefaultPool())
@@ -199,16 +195,11 @@ namespace LibTessDotNet
         }
         public Tess(IPool pool)
         {
-            if (pool == null)
-            {
-                throw new ArgumentNullException("pool");
-            }
-
             _normal = Vec3.Zero;
             _bminX = _bminY = _bmaxX = _bmaxY = 0;
 
             _windingRule = WindingRule.EvenOdd;
-            _pool = pool;
+            _pool = pool ?? throw new ArgumentNullException(nameof(pool));
             _mesh = null;
 
             _vertices = null;
@@ -798,7 +789,7 @@ namespace LibTessDotNet
         /// <param name="combineCallback"> Interpolator used to determine the data payload of generated vertices. </param>
         /// <param name="normal"> Normal of the input contours. If set to zero, the normal will be calculated during tessellation. </param>
         public void Tessellate(WindingRule windingRule = WindingRule.EvenOdd, ElementType elementType = ElementType.Polygons, int polySize = 3,
-            CombineCallback combineCallback = null, Vec3 normal = new Vec3())
+            CombineCallback combineCallback = null, Vec3 normal = new())
         {
             _normal = normal;
             _vertices = null;

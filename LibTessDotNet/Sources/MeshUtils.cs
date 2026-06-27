@@ -32,8 +32,10 @@
 */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 #if DOUBLE
 using Real = System.Double;
@@ -43,11 +45,11 @@ using Real = System.Single;
 namespace LibTessDotNet
 #endif
 {
-    public struct Vec3
+    public struct Vec3(Real x, Real y, Real z)
     {
-        public readonly static Vec3 Zero = new Vec3();
+        public static readonly Vec3 Zero = new Vec3();
 
-        public Real X, Y, Z;
+        public Real X = x, Y = y, Z = z;
 
         public Real this[int index]
         {
@@ -56,22 +58,27 @@ namespace LibTessDotNet
                 if (index == 0) return X;
                 if (index == 1) return Y;
                 if (index == 2) return Z;
-                throw new IndexOutOfRangeException();
+                return ThrowIndexOutOfRangeException();
+
+                [DoesNotReturn]
+                Real ThrowIndexOutOfRangeException()
+                {
+                    throw new IndexOutOfRangeException();
+                }
             }
             set
             {
                 if (index == 0) X = value;
                 else if (index == 1) Y = value;
                 else if (index == 2) Z = value;
-                else throw new IndexOutOfRangeException();
-            }
-        }
+                else ThrowIndexOutOfRangeException();
 
-        public Vec3(Real x, Real y, Real z)
-        {
-            X = x;
-            Y = y;
-            Z = z;
+                [DoesNotReturn]
+                void ThrowIndexOutOfRangeException()
+                {
+                    throw new IndexOutOfRangeException();
+                }
+            }
         }
 
         public static void Sub(ref Vec3 lhs, ref Vec3 rhs, out Vec3 result)
@@ -113,7 +120,7 @@ namespace LibTessDotNet
 
         public override string ToString()
         {
-            return string.Format("{0}, {1}, {2}", X, Y, Z);
+            return $"{X}, {Y}, {Z}";
         }
     }
 
@@ -123,39 +130,52 @@ namespace LibTessDotNet
         void Return(object obj);
     }
 
-    public class DefaultTypePool<T> : ITypePool where T: class, Pooled<T>, new()
+    public interface ITypePool<T> : ITypePool where T : class
     {
-        private Queue<T> _pool = new Queue<T>();
-
-        private static readonly Func<T> Creator = Expression.Lambda<Func<T>>(Expression.New(typeof(T))).Compile();
-
-        public object Get()
+        object ITypePool.Get()
         {
-            lock (_pool)
-            {
-                if (_pool.Count > 0)
-                {
-                    return _pool.Dequeue();
-                }
-            }
-            return Creator();
+            return Get();
         }
 
-        public void Return(object obj)
+        void ITypePool.Return(object obj)
         {
-            lock (_pool)
+            Return((obj as T)!);
+        }
+
+        new T Get();
+        void Return(T obj);
+    }
+
+    public class DefaultTypePool<T>(Func<T> creator) : ITypePool<T> where T : class, Pooled<T>, new()
+    {
+        private readonly ConcurrentQueue<T> _pool = new();
+
+#if DEBUG
+        private readonly ConcurrentDictionary<T, T> _dict = new();
+#endif
+
+        public T Get()
+        {
+            if (_pool.TryDequeue(out var obj))
             {
 #if DEBUG
-                foreach (var other in _pool)
-                {
-                    if (other == obj)
-                    {
-                        throw new InvalidOperationException("object already pooled");
-                    }
-                }
+                _dict.TryRemove(obj, out _);
 #endif
-                _pool.Enqueue(obj as T);
+                return obj;
             }
+            
+            return creator();
+        }
+
+        public void Return(T obj)
+        {
+#if DEBUG
+            if (!_dict.TryAdd(obj as T, obj as T))
+            {
+                throw new InvalidOperationException("object already pooled");
+            }
+#endif
+            _pool.Enqueue(obj as T);
         }
     }
 
@@ -163,12 +183,12 @@ namespace LibTessDotNet
     {
         public IPool()
         {
-            Register<Mesh>(new DefaultTypePool<Mesh>());
-            Register<MeshUtils.Vertex>(new DefaultTypePool<MeshUtils.Vertex>());
-            Register<MeshUtils.Face>(new DefaultTypePool<MeshUtils.Face>());
-            Register<MeshUtils.Edge>(new DefaultTypePool<MeshUtils.Edge>());
-            Register<Tess.ActiveRegion>(new DefaultTypePool<Tess.ActiveRegion>());
-            Register<Dict<Tess.ActiveRegion>.Node>(new DefaultTypePool<Dict<Tess.ActiveRegion>.Node>());
+            Register<Mesh>(new DefaultTypePool<Mesh>(static () => new Mesh()));
+            Register<MeshUtils.Vertex>(new DefaultTypePool<MeshUtils.Vertex>(static () => new MeshUtils.Vertex()));
+            Register<MeshUtils.Face>(new DefaultTypePool<MeshUtils.Face>(static () => new MeshUtils.Face()));
+            Register<MeshUtils.Edge>(new DefaultTypePool<MeshUtils.Edge>(static () => new MeshUtils.Edge()));
+            Register<Tess.ActiveRegion>(new DefaultTypePool<Tess.ActiveRegion>(static () => new Tess.ActiveRegion()));
+            Register<Dict<Tess.ActiveRegion>.Node>(new DefaultTypePool<Dict<Tess.ActiveRegion>.Node>(static () => new Dict<Tess.ActiveRegion>.Node()));
         }
         public abstract void Register<T>(ITypePool typePool) where T : class, Pooled<T>, new();
         public abstract T Get<T>() where T : class, Pooled<T>, new();
@@ -211,7 +231,7 @@ namespace LibTessDotNet
         public override T Get<T>()
         {
             ITypePool typePool;
-            T obj = null;
+            T? obj = null;
             if (_register.TryGetValue(typeof(T), out typePool))
             {
                 obj = typePool.Get() as T;

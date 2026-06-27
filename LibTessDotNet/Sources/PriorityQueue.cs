@@ -41,29 +41,17 @@ namespace LibTessDotNet.Double
 namespace LibTessDotNet
 #endif
 {
-    internal class PriorityQueue<TValue> where TValue : class
+    internal class PriorityQueue<TValue>(int initialSize, PriorityHeap<TValue>.LessOrEqual leq)
+        where TValue : class
     {
-        private PriorityHeap<TValue>.LessOrEqual _leq;
-        private PriorityHeap<TValue> _heap;
-        private TValue[] _keys;
+        private PriorityHeap<TValue> _heap = new(initialSize, leq);
+        private TValue[] _keys = new TValue[initialSize];
         private int[] _order;
 
-        private int _size, _max;
-        private bool _initialized;
+        private int _size = 0, _max = initialSize;
+        private bool _initialized = false;
 
         public bool Empty { get { return _size == 0 && _heap.Empty; } }
-
-        public PriorityQueue(int initialSize, PriorityHeap<TValue>.LessOrEqual leq)
-        {
-            _leq = leq;
-            _heap = new PriorityHeap<TValue>(initialSize, leq);
-
-            _keys = new TValue[initialSize];
-
-            _size = 0;
-            _max = initialSize;
-            _initialized = false;
-        }
 
         struct StackItem
         {
@@ -108,8 +96,8 @@ namespace LibTessDotNet
                     i = p - 1;
                     j = r + 1;
                     do {
-                        do { ++i; } while (!_leq(_keys[_order[i]], _keys[piv]));
-                        do { --j; } while (!_leq(_keys[piv], _keys[_order[j]]));
+                        do { ++i; } while (!leq(_keys[_order[i]], _keys[piv]));
+                        do { --j; } while (!leq(_keys[piv], _keys[_order[j]]));
                         Swap(ref _order[i], ref _order[j]);
                     } while (i < j);
                     Swap(ref _order[i], ref _order[j]);
@@ -127,7 +115,7 @@ namespace LibTessDotNet
                 for (i = p + 1; i <= r; ++i)
                 {
                     piv = _order[i];
-                    for (j = i; j > p && !_leq(_keys[piv], _keys[_order[j - 1]]); --j)
+                    for (j = i; j > p && !leq(_keys[piv], _keys[_order[j - 1]]); --j)
                     {
                         _order[j] = _order[j - 1];
                     }
@@ -140,7 +128,7 @@ namespace LibTessDotNet
             r = _size - 1;
             for (i = p; i < r; ++i)
             {
-                Debug.Assert(_leq(_keys[_order[i + 1]], _keys[_order[i]]), "Wrong sort");
+                Debug.Assert(leq(_keys[_order[i + 1]], _keys[_order[i]]), "Wrong sort");
             }
 #endif
 
@@ -179,7 +167,7 @@ namespace LibTessDotNet
             if (!_heap.Empty)
             {
                 TValue heapMin = _heap.Minimum();
-                if (_leq(heapMin, sortMin))
+                if (leq(heapMin, sortMin))
                     return _heap.ExtractMin();
             }
             do {
@@ -201,7 +189,7 @@ namespace LibTessDotNet
             if (!_heap.Empty)
             {
                 TValue heapMin = _heap.Minimum();
-                if (_leq(heapMin, sortMin))
+                if (leq(heapMin, sortMin))
                     return heapMin;
             }
             return sortMin;

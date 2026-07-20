@@ -231,7 +231,7 @@ namespace LibTessDotNet
         public override T Get<T>()
         {
             ITypePool typePool;
-            T? obj = null;
+            T obj = null;
             if (_register.TryGetValue(typeof(T), out typePool))
             {
                 obj = typePool.Get() as T;
